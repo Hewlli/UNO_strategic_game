@@ -1,0 +1,190 @@
+# 📄 UNO ENGINE IMPLEMENTATION DOCUMENTATION
+
+## 🎮 **GAME OVERVIEW**
+This UNO game engine implements the core UNO card game rules with support for 2-4 players, all special cards, and proper turn-based gameplay.
+
+## ✅ **IMPLEMENTED RULES**
+
+### **1. BASIC GAME SETUP**
+- ✅ **Players**: 2-4 players (validated on initialization)
+- ✅ **Deck**: Full 108-card UNO deck including:
+  - Number cards (0-9) in 4 colors (Red, Blue, Green, Yellow)
+  - Special action cards (Skip, Reverse, Draw Two) in 4 colors
+  - Wild cards (Wild and Wild Draw Four)
+- ✅ **Initial deal**: 7 cards per player
+- ✅ **Starting card**: First discard card is never wild or special (ensures playable start)
+- ✅ **Turn order**: Starts with Player 0, proceeds clockwise
+
+### **2. CARD MATCHING RULES**
+- ✅ **Color match**: Cards of same color can be played
+- ✅ **Number/Value match**: Cards with same number/value can be played
+- ✅ **Wild cards**: Can be played on ANY card
+- ✅ **Wild card persistence**: After wild card played, chosen color persists until another non-wild card played
+
+### **3. SPECIAL CARD EFFECTS**
+
+#### **🎨 WILD CARD**
+- Can be played on any card
+- **Player MUST choose a color** (Red, Blue, Green, Yellow)
+- Changes current play color to chosen color
+- No additional penalties or draws
+
+#### **🎨➕4 WILD DRAW FOUR**
+- Can be played on any card (simplified - no challenge rule implemented)
+- **Player MUST choose a color**
+- **Next player draws 4 cards** and loses their turn
+- Can be chained (see Draw Pile Accumulation)
+
+#### **⏭️ SKIP CARD**
+- **Next player's turn is skipped**
+- Play proceeds to player after skipped player
+- Skip effect is applied immediately
+
+#### **🔄 REVERSE CARD**
+- **Reverses direction of play** (clockwise ↔ counter-clockwise)
+- **Special 2-player rule**: In 2-player games, Reverse acts as Skip
+- Direction change is applied immediately
+
+#### **➕2 DRAW TWO CARD**
+- **Next player draws 2 cards** and loses their turn
+- Can be chained (see Draw Pile Accumulation)
+
+### **4. TURN MECHANICS**
+
+#### **Normal Turn Flow**
+1. Check if it's player's turn (engine validates)
+2. Get legal actions for player
+3. Player chooses to:
+   - Play a legal card
+   - Draw a card
+4. Apply chosen action
+5. Advance to next player (considering skips and direction)
+
+#### **"Play After Draw" Rule (Official UNO Rule)**
+- ✅ Player may draw a card even if they have playable cards
+- ✅ After drawing:
+  - **If drawn card is playable**: Player may choose to play it immediately
+  - **If drawn card is not playable**: Turn ends automatically
+- ✅ Using `draw_with_option()` API for proper implementation
+- ✅ Backward compatibility with `apply_action('draw')` (ends turn immediately)
+
+### **5. DRAW PILE ACCUMULATION**
+- ✅ **Draw Two chains**: If Player A plays +2, Player B can play another +2 to pass 4 cards to Player C
+- ✅ **Wild Draw Four chains**: Same chaining logic for +4 cards
+- ✅ **Mixed chains not allowed**: +2 cannot be played on +4, and vice versa
+- ✅ When draw pile exists, player can only:
+  - Play matching draw card (add to chain)
+  - Draw all accumulated cards (ends turn)
+
+### **6. WINNING CONDITIONS**
+- ✅ **UNO call**: Automatic detection when player has 1 card left
+- ✅ **Win condition**: Player plays their last card
+- ✅ **Game end detection**: Automatic with winner announcement
+- ✅ **No scoring system**: Simple "first to empty hand wins"
+
+### **7. DECK MANAGEMENT**
+- ✅ **Deck reshuffling**: When deck empties, discard pile (except top card) is reshuffled
+- ✅ **Card counting**: Proper 108-card distribution maintained
+- ✅ **No infinite loops**: Guard against endless wild/special card redrawing at start
+
+## ⚠️ **SIMPLIFICATIONS & DEVIATIONS FROM OFFICIAL RULES**
+
+### **1. Wild Draw Four Challenge Rule**
+- **Official rule**: Can only play Wild Draw Four if player has NO cards matching current color
+- **Our implementation**: Wild Draw Four can always be played (simplification)
+- **Reason**: Challenge system adds significant complexity for minimal gameplay impact
+
+### **2. Manual UNO Calling**
+- **Official rule**: Player must say "UNO" when they have 1 card left, or draw 2 penalty cards
+- **Our implementation**: Automatic UNO detection and announcement
+- **Reason**: Simplifies gameplay flow; penalty enforcement adds UI complexity
+
+### **3. No Card Penalties**
+- **Official rule**: Various penalties for rule violations
+- **Our implementation**: Invalid moves simply rejected with error message
+- **Reason**: Educational project focus is on core gameplay, not penalty systems
+
+### **4. No Time Limits**
+- **Official rule**: Players have limited time to play
+- **Our implementation**: No time limits
+- **Reason**: Turn-based design for learning/experimentation
+
+### **5. No Card Trading or Special Actions**
+- **Official rule**: House rules may allow card trading, etc.
+- **Our implementation**: Standard UNO rules only
+- **Reason**: Focus on core official gameplay
+
+## 🔧 **ENGINE API SUMMARY**
+
+### **Core Methods**
+```python
+# Game setup
+game = UnoGameState(num_players=3)
+game.initialize_game()
+
+# Player actions
+legal_actions = game.get_legal_actions(player_idx)
+success = game.apply_action(player_idx, 'play', card, chosen_color)
+
+# Draw with "play after draw" rule
+drawn_card, is_playable = game.draw_with_option(player_idx)
+if is_playable:
+    game.play_drawn_card(player_idx, chosen_color)  # Play it
+    # OR
+    game.end_turn_after_draw(player_idx)  # Don't play it
+
+# Game state
+top_card = game.get_top_card()
+hand = game.get_player_hand(player_idx)
+summary = game.get_game_state_summary()
+```
+
+### **State Tracking**
+- `current_player`: Who's turn it is
+- `direction`: 1 (clockwise) or -1 (counter-clockwise)
+- `draw_pile_count`: Accumulated cards to draw
+- `skip_next`: Whether next player is skipped
+- `pending_color`: Current wild card color choice
+- `game_over`/`winner`: Game end state
+- `players_uno`: Who has 1 card left
+
+## 🎯 **DESIGN DECISIONS**
+
+### **1. Player-Centric Design**
+- Human is always Player 0
+- Clear separation between human and bot players
+- Public info vs private hand separation
+
+### **2. Error Handling**
+- Invalid moves rejected with descriptive messages
+- Turn validation prevents out-of-turn plays
+- Game state validation prevents illegal actions
+
+### **3. Extensibility**
+- Clean API for bot AI development
+- Game state summary for logging/analysis
+- Modular design for future enhancements
+
+### **4. Educational Focus**
+- Clear, readable code
+- Good comments and documentation
+- Balance between correctness and complexity
+
+## 📊 **GAME STATISTICS TRACKED**
+- Turn count
+- Hand sizes for all players
+- Deck remaining cards
+- Special card play counts (via logs)
+- Game duration (via turn count)
+
+## 🔮 **POTENTIAL ENHANCEMENTS (Future)**
+1. Wild Draw Four challenge system
+2. Manual UNO calling with penalties
+3. Scoring system (500 points to win)
+4. Multiple game sessions
+5. Advanced bot strategies
+6. Graphical user interface
+7. Network multiplayer support
+
+## 📝 **USAGE NOTES FOR TEAM MEMBERS**
+
